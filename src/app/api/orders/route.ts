@@ -3,6 +3,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
+type RouteParams = {
+  params: {
+    id: string;
+  };
+};
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -20,10 +26,11 @@ export async function GET() {
 // Never trusts client-sent prices — always re-reads Product.priceCents,
 // and re-checks that each product is available to the buyer's city
 // (or the default Polish section) before allowing the order.
-export async function POST(req: Request) {
+export async function PATCH(request: Request, {params}:RouteParams) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const orderId = params.id;
   const userId = (session.user as any).id;
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -32,6 +39,13 @@ export async function POST(req: Request) {
   const requested: { productId: string; size: string; quantity: number }[] = body.items || [];
   if (!Array.isArray(requested) || requested.length === 0) {
     return NextResponse.json({ error: 'Cart is empty.' }, { status: 400 });
+  }
+
+  export async function DELETE(request:Request, { params }: RouteParams) {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const orderId = params.id;
   }
 
   const orderItemsData = [];
