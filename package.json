@@ -48,3 +48,12 @@
     "typescript": "^5.5.4"
   }
 }
+{
+  "scripts": {
+    "vercel-build": "npm run approve-scripts && npm run build",
+    "approve-scripts": "npm approve-scripts --allow-scripts-pending",
+    "build": "next build",
+    "start": "next start",
+    "dev": "next dev"
+  }
+}
