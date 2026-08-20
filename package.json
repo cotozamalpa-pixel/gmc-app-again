@@ -53,5 +53,8 @@
     "build": "next build",
     "start": "next start",
     "dev": "next dev"
+  },
+  "overrides": {
+    "source-map": "0.7.4"
   }
 }
