@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ALUNO
+  GRADUADO
+  MONITOR
+  INSTRUTOR
+  PROFESSOR
+  CONTRAMESTRE
+  MESTRE
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  READY_FOR_PICKUP
+  COMPLETED
+  CANCELLED
+}
+
+// A physical training location / section (e.g. "Warszawa", "Krakow").
+// exactly one City should have isDefaultSection = true (the Polish national
+// section) — its products are visible to every user regardless of home city.
+model City {
+  id                String    @id @default(cuid())
+  name              String    @unique
+  isDefaultSection  Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+
+  users             User[]
+  qrCodes           DailyQRCode[]
+  attendance        AttendanceRecord[]
+  productCities      ProductCity[]
+}
+
+// The graduation / belt system, fully configurable by the admin.
+// `order` controls display/progression order (0 = lowest).
+model Belt {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g. "Corda Crua", "Corda Verde e Amarela"
+  colorHex    String   @default("#f2b705")
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  users       User[]
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  role          Role      @default(ALUNO)
+
+  name          String
+  surname       String
+  apelido       String    // capoeira nickname
+  birthDate     DateTime
+  startDate     DateTime  // date they started training - basis for the timeline
+
+  beltId        String?
+  belt          Belt?     @relation(fields: [beltId], references: [id])
+
+  cityId        String
+  city          City      @relation(fields: [cityId], references: [id])
+
+  // "Paused" timeline support: while paused, the user's training-timeline
+  // clock stops (used for graduation-eligibility calculations) and they
+  // are flagged inactive across admin views.
+  isPaused        Boolean   @default(false)
+  pausedAt        DateTime?
+  pausedReason    String?
+  totalPausedDays Int       @default(0) // accumulated across all past pauses
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  attendance    AttendanceRecord[]
+  orders        Order[]
+}
+
+// One QR code is generated per city per calendar day. Students scan it
+// (or an instructor scans the student's own account QR — see /scan) to
+// check into that day's class.
+model DailyQRCode {
+  id          String    @id @default(cuid())
+  date        DateTime  @db.Date
+  cityId      String
+  city        City      @relation(fields: [cityId], references: [id])
+  token       String    @unique // signed, single-use-per-day-per-user token
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  attendance  AttendanceRecord[]
+
+  @@unique([cityId, date])
+}
+
+model AttendanceRecord {
+  id            String       @id @default(cuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id])
+  cityId        String
+  city          City         @relation(fields: [cityId], references: [id])
+  date          DateTime     @db.Date
+  checkedInAt   DateTime     @default(now())
+  qrCodeId      String?
+  qrCode        DailyQRCode? @relation(fields: [qrCodeId], references: [id])
+
+  @@unique([userId, date]) // one check-in per student per day
+}
+
+enum ProductType {
+  TSHIRT
+  HOODIE
+  RASHGUARD
+  ABADA
+  OTHER
+}
+
+model Product {
+  id            String        @id @default(cuid())
+  name          String
+  description   String        @default("")
+  type          ProductType   @default(OTHER)
+  priceCents    Int
+  currency      String        @default("PLN")
+  imageUrl      String?
+  sizes         String[]      @default(["PP", "P", "M", "G", "GG"])
+  active        Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+
+  // Cities allowed to purchase this product. If empty, treat as
+  // "every city" (rare) — normally this is the student's home city
+  // plus the default Polish section, set automatically at creation.
+  cities        ProductCity[]
+  orderItems    OrderItem[]
+}
+
+model ProductCity {
+  productId String
+  cityId    String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  city      City    @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  @@id([productId, cityId])
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  status      OrderStatus @default(PENDING)
+  totalCents  Int
+  currency    String      @default("PLN")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  items       OrderItem[]
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  size        String
+  quantity    Int
+  unitPriceCents Int
+}
